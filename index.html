@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    integrity="sha512-KymZQmWtnGxkAFm9CtvRFcUXApoFm2Zgzy+f2NB3aLpS3c0NYWX9c2zpKToI0owGzzD65+qfEVTY75loRdDUZg=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <title>Multi-Player HLS Live Stream</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      height: 100%;
+      overflow: hidden;
+      /* Prevent scrolling */
+    }
+
+    .players-container {
+      display: grid;
+      gap: 10px;
+      /* Space between players */
+      padding: 10px;
+      background-color: black;
+      width: 100%;
+      height: 100%;
+    }
+
+    .video-container {
+      position: relative;
+      background-color: black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border: 2px solid white;
+      /* Add white border */
+    }
+
+    video {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+      pointer-events: none;
+      object-fit: contain;
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      z-index: 100;
+      padding: 10px;
+      opacity: 0;
+      /* Hide controls by default */
+      transition: opacity 0.3s ease;
+    }
+
+    /* Show controls on hover */
+    .video-container:hover .controls {
+      opacity: 1;
+    }
+
+    #muteBtn,
+    #unMuteBtn,
+    #fullscreenBtn,
+    #playBtn,
+    #pauseBtn {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    #playBtn,
+    #pauseBtn {
+      display: none;
+      /* Hide Play/Pause buttons by default */
+    }
+
+    #loadingImage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('/cover-live.png');
+      /* Use background-image */
+      background-size: contain;
+      /* Ensure image fits within the container */
+      background-position: center;
+      /* Center the image */
+      background-repeat: no-repeat;
+      /* Prevent repeating */
+      z-index: 200;
+    }
+
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+      .players-container {
+        grid-template-columns: repeat(1, 1fr);
+        /* One player per row */
+        overflow-x: auto;
+        /* Horizontal scrolling */
+        white-space: nowrap;
+        /* Prevent wrapping */
+      }
+
+      .video-container {
+        width: 100vw;
+        /* Full viewport width */
+        height: 50vh;
+        /* Adjust height for mobile */
+        border: 2px solid white;
+        /* Keep border */
+      }
+
+      #loadingImage {
+        background-size: 60%;
+        /* Smaller loading image for mobile */
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="players-container" id="playersContainer"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script>
+    const streamLinks = [
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+      "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/mazhavilmanorama_nim_https/050522/mazhavilmanorama/playlist.m3u8",
+    ];
+
+    const playersContainer = document.getElementById('playersContainer');
+
+    // Function to calculate grid layout
+    function calculateGridLayout(numPlayers) {
+      let rows, cols;
+
+      if (numPlayers <= 2) {
+        rows = 1;
+        cols = numPlayers;
+      } else if (numPlayers <= 4) {
+        rows = 2;
+        cols = 2;
+      } else if (numPlayers <= 6) {
+        rows = 2;
+        cols = 3;
+      } else if (numPlayers <= 8) {
+        rows = 2;
+        cols = 4;
+      } else {
+        rows = Math.ceil(Math.sqrt(numPlayers));
+        cols = Math.ceil(numPlayers / rows);
+      }
+
+      return { rows, cols };
+    }
+
+    // Apply grid layout
+    function applyGridLayout(rows, cols) {
+      playersContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      playersContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    }
+
+    // Function to create a video player
+    function createVideoPlayer(streamUrl, index) {
+      const videoContainer = document.createElement('div');
+      videoContainer.className = 'video-container';
+
+      const video = document.createElement('video');
+      video.id = `videoPlayer-${index}`;
+      video.playsinline = true;
+      video.muted = true;
+      videoContainer.appendChild(video);
+
+      const loadingImage = document.createElement('div');
+      loadingImage.id = `loadingImage-${index}`;
+      loadingImage.innerHTML = '<img src="/cover-live.png" alt="Loading...">';
+
+      // Center the loading image within the player
+      loadingImage.style.display = 'flex'; // Use flexbox for centering
+      loadingImage.style.justifyContent = 'center'; // Center horizontally
+      loadingImage.style.alignItems = 'center'; // Center vertically
+      loadingImage.style.width = '100%'; // Full width of the player
+      loadingImage.style.height = '100%'; // Full height of the player
+      loadingImage.style.position = 'absolute'; // Position absolutely within the player
+      loadingImage.style.top = '0';
+      loadingImage.style.left = '0';
+      loadingImage.style.backgroundColor = 'black'; // Optional: Add a background color
+
+      // Ensure the image scales properly
+      loadingImage.querySelector('img').style.maxWidth = '100%';
+      loadingImage.querySelector('img').style.maxHeight = '100%';
+      loadingImage.querySelector('img').style.objectFit = 'contain'; // Ensure the image fits
+
+      videoContainer.appendChild(loadingImage);
+
+      const controls = document.createElement('div');
+      controls.className = 'controls';
+      controls.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 40px;">
+          <img id="playBtn-${index}" style="width: 20px; height: 20px; margin:5px; cursor:pointer;" src="/playBtn.png" alt="Play">
+          <img id="pauseBtn-${index}" style="width: 20px; height: 20px; margin:5px; cursor:pointer;" src="/pauseBtn.png" alt="Pause">
+        </div>
+        <div id="doubleBtn-${index}" style="flex-grow: 1; width: 100%; display: flex; justify-content: space-between; align-items: center;">
+          <img id="muteBtn-${index}" style="width: 20px; height: 20px; cursor:pointer;" src="/unmute.png" alt="Mute">
+          <img id="unMuteBtn-${index}" style="width: 20px; height: 20px; display: none; cursor:pointer;" src="/muteBtn.png" alt="Unmute">
+          <img id="fullscreenBtn-${index}" style="width: 20px; height: 20px; cursor:pointer;" src="/expand.png" alt="Fullscreen">
+        </div>
+      `;
+      videoContainer.appendChild(controls);
+
+      playersContainer.appendChild(videoContainer);
+
+      return { video, loadingImage, controls };
+    }
+
+    // Function to initialize a stream
+    function initializeStream(video, loadingImage, controls, streamUrl, index) {
+      let hls;
+      let retryCount = 0;
+      const maxRetries = 5;
+      let retryTimeout;
+
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1024 * 1024,
+        });
+
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          playVideo(video);
+        });
+
+        video.addEventListener('playing', () => {
+          loadingImage.style.display = 'none';
+          retryCount = 0;
+        });
+
+        video.addEventListener('stalled', () => handleStall(video, hls, loadingImage, streamUrl));
+        video.addEventListener('error', () => handleVideoError(video, hls, loadingImage, streamUrl));
+        hls.on(Hls.Events.ERROR, (event, data) => handleHlsError(event, data, video, hls, loadingImage, streamUrl));
+      }
+
+      // Add event listeners for controls
+      const playBtn = document.getElementById(`playBtn-${index}`);
+      const pauseBtn = document.getElementById(`pauseBtn-${index}`);
+      const muteBtn = document.getElementById(`muteBtn-${index}`);
+      const unMuteBtn = document.getElementById(`unMuteBtn-${index}`);
+      const fullscreenBtn = document.getElementById(`fullscreenBtn-${index}`);
+
+      // Play/Pause button logic
+      video.addEventListener('play', () => {
+        playBtn.style.display = 'none';
+        pauseBtn.style.display = 'block';
+      });
+
+      video.addEventListener('pause', () => {
+        playBtn.style.display = 'block';
+        pauseBtn.style.display = 'none';
+      });
+
+      playBtn.addEventListener('click', () => video.play());
+      pauseBtn.addEventListener('click', () => video.pause());
+
+      // Mute/Unmute button logic
+      muteBtn.addEventListener('click', () => {
+        video.muted = false;
+        muteBtn.style.display = 'none';
+        unMuteBtn.style.display = 'block';
+      });
+
+      unMuteBtn.addEventListener('click', () => {
+        video.muted = true;
+        muteBtn.style.display = 'block';
+        unMuteBtn.style.display = 'none';
+      });
+
+      // Fullscreen button logic
+      fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          video.parentElement.requestFullscreen();
+        } else {
+          document.exitFullscreen();
+        }
+      });
+    }
+
+    // Initialize players
+    function initializePlayers() {
+      const { rows, cols } = calculateGridLayout(streamLinks.length);
+      applyGridLayout(rows, cols);
+
+      streamLinks.forEach((streamUrl, index) => {
+        const { video, loadingImage, controls } = createVideoPlayer(streamUrl, index);
+        initializeStream(video, loadingImage, controls, streamUrl, index);
+      });
+    }
+
+    // Call the function to initialize players
+    initializePlayers();
+
+    // Error handling functions
+    function handleStall(video, hls, loadingImage, streamUrl) {
+      console.log("Video stalled. Attempting to recover...");
+      attemptRetry(video, hls, loadingImage, streamUrl);
+    }
+
+    function handleVideoError(video, hls, loadingImage, streamUrl) {
+      console.log("Video error. Attempting to recover...");
+      attemptRetry(video, hls, loadingImage, streamUrl);
+    }
+
+    function handleHlsError(event, data, video, hls, loadingImage, streamUrl) {
+      console.error("HLS Error:", data);
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            console.log("Network error encountered. Retrying...");
+            attemptRetry(video, hls, loadingImage, streamUrl);
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            console.log("Media error encountered. Attempting recovery...");
+            attemptRetry(video, hls, loadingImage, streamUrl);
+            break;
+          default:
+            console.log("Unrecoverable error. Showing loading image...");
+            displayLoadingImage(loadingImage, video);
+            break;
+        }
+      }
+    }
+
+    function attemptRetry(video, hls, loadingImage, streamUrl) {
+      if (retryCount < maxRetries) {
+        retryCount++;
+        console.log(`Retrying... Attempt ${retryCount}/${maxRetries}`);
+
+        video.pause();
+        loadingImage.style.display = 'none';
+
+        retryTimeout = setTimeout(() => {
+          hls.loadSource(streamUrl);
+          hls.attachMedia(video);
+        }, 5000);
+      } else {
+        console.log("Max retries reached. Showing loading image.");
+        displayLoadingImage(loadingImage, video);
+      }
+    }
+
+    function displayLoadingImage(loadingImage, video) {
+      loadingImage.style.display = 'flex';
+      video.pause();
+    }
+
+    function playVideo(video) {
+      video.play().catch(err => {
+        console.log("Autoplay prevented. Waiting for user interaction.");
+      });
+    }
+  </script>
+</body>
+
+</html>
